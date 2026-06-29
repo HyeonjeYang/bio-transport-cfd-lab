@@ -37,16 +37,52 @@ Units use micrometers and seconds: `D` in `um^2/s`, `U` in `um/s`, `k` in `1/s`.
 
 ## Quickstart
 
+Windows PowerShell:
+
+```powershell
+git clone https://github.com/HyeonjeYang/bio-transport-cfd-lab.git
+cd bio-transport-cfd-lab
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+py -m pip install -r requirements-dev.txt
+py -m pytest
+py scripts\run_all_examples.py
+uvicorn app.main:app --reload
+```
+
+macOS:
+
 ```bash
+git clone https://github.com/HyeonjeYang/bio-transport-cfd-lab.git
+cd bio-transport-cfd-lab
 python -m venv .venv
-.venv\Scripts\activate
+source .venv/bin/activate
 python -m pip install -r requirements-dev.txt
-pytest
+python -m pytest
+python scripts/run_all_examples.py
+uvicorn app.main:app --reload
+```
+
+Linux:
+
+```bash
+git clone https://github.com/HyeonjeYang/bio-transport-cfd-lab.git
+cd bio-transport-cfd-lab
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements-dev.txt
+python -m pytest
+python scripts/run_all_examples.py
+uvicorn app.main:app --reload
+```
+
+Example scripts:
+
+```bash
 python scripts/run_random_walk.py --outdir outputs/random_walk
 python scripts/run_cartesian_transport.py --preset microchannel_biosensor --D 80 --U 200 --k 0.02 --outdir outputs/microchannel
 python scripts/run_radial_transport.py --geometry spherical --preset spherical_cell_uptake --radius 10 --D 100 --outdir outputs/spherical_cell
 python scripts/run_radial_transport.py --geometry cylindrical --preset cylindrical_vessel_transport --radius 20 --D 120 --outdir outputs/cylindrical_vessel
-uvicorn app.main:app --reload
 ```
 
 Notebook:
