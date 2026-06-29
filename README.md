@@ -40,7 +40,7 @@ Units use micrometers and seconds: `D` in `um^2/s`, `U` in `um/s`, `k` in `1/s`.
 ```bash
 python -m venv .venv
 .venv\Scripts\activate
-python -m pip install -e ".[dev]"
+python -m pip install -r requirements-dev.txt
 pytest
 python scripts/run_random_walk.py --outdir outputs/random_walk
 python scripts/run_cartesian_transport.py --preset microchannel_biosensor --D 80 --U 200 --k 0.02 --outdir outputs/microchannel
