@@ -31,7 +31,6 @@ from biotransport_lab.solver_radial import (
     uniform_radial_initial,
 )
 
-
 PRESETS: dict[str, dict[str, str]] = {
     "random_walk_diffusion": {
         "kind": "random_walk",

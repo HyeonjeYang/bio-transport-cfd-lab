@@ -10,7 +10,6 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Literal
 
-
 BoundaryKind = Literal["noflux", "fixed", "absorbing"]
 RadialGeometry = Literal["cylindrical", "spherical"]
 FlowKind = Literal["uniform", "poiseuille", "shear", "vortex", "radial"]

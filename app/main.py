@@ -16,7 +16,6 @@ from biotransport_lab.api import (
 )
 from biotransport_lab.openfoam_adapter import get_openfoam_status, run_openfoam_case
 
-
 ROOT = Path(__file__).resolve().parents[1]
 WEB_DIR = ROOT / "web"
 
