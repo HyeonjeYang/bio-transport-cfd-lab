@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BioTransport CFD Lab</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="controls" aria-label="Simulation controls">
+        <div class="brand">
+          <h1>BioTransport CFD Lab</h1>
+          <p>Fast educational Python solver</p>
+        </div>
+
+        <label>
+          Preset
+          <select id="preset"></select>
+        </label>
+
+        <div class="grid-two">
+          <label>
+            Geometry
+            <select id="geometry">
+              <option value="spherical">spherical</option>
+              <option value="cylindrical">cylindrical</option>
+            </select>
+          </label>
+          <label>
+            Boundary
+            <select id="boundary">
+              <option value="absorbing">absorbing</option>
+              <option value="noflux">noflux</option>
+              <option value="fixed">fixed</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="slider-grid">
+          <label>D <span id="DValue"></span><input id="D" type="range" min="10" max="250" value="80" step="5" /></label>
+          <label>U <span id="UValue"></span><input id="U" type="range" min="0" max="500" value="200" step="10" /></label>
+          <label>k <span id="kValue"></span><input id="k" type="range" min="0" max="0.12" value="0.02" step="0.005" /></label>
+          <label>source x <span id="source_xValue"></span><input id="source_x" type="range" min="0" max="220" value="24" step="2" /></label>
+          <label>source y <span id="source_yValue"></span><input id="source_y" type="range" min="0" max="90" value="45" step="2" /></label>
+          <label>sensor x <span id="sensor_xValue"></span><input id="sensor_x" type="range" min="0" max="220" value="170" step="2" /></label>
+          <label>sensor y <span id="sensor_yValue"></span><input id="sensor_y" type="range" min="0" max="90" value="45" step="2" /></label>
+          <label>radius <span id="radiusValue"></span><input id="radius" type="range" min="5" max="60" value="20" step="1" /></label>
+          <label>time <span id="total_timeValue"></span><input id="total_time" type="range" min="0.05" max="2" value="1" step="0.05" /></label>
+        </div>
+
+        <div class="button-row">
+          <button id="runButton" type="button">Run Python</button>
+          <button id="exportPngButton" type="button">Export PNG</button>
+          <button id="exportCsvButton" type="button">Export CSV</button>
+          <button id="resetButton" type="button">Reset</button>
+        </div>
+
+        <section class="openfoam-panel" aria-label="OpenFOAM backend">
+          <div>
+            <strong>Optional high-fidelity OpenFOAM backend</strong>
+            <p id="openfoamStatus">Checking...</p>
+          </div>
+          <button id="openfoamButton" type="button" disabled>Run OpenFOAM</button>
+        </section>
+      </aside>
+
+      <section class="workspace" aria-label="Simulation results">
+        <div class="plot-band">
+          <div id="fieldPlot" class="plot"></div>
+          <div id="curvePlot" class="plot"></div>
+        </div>
+        <div class="summary-band">
+          <div id="numbers"></div>
+          <div id="runMeta"></div>
+          <a id="downloadLink" class="download" hidden>Download</a>
+        </div>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
