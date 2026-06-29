@@ -16,7 +16,7 @@ Educational use only. These models are not validated for research, clinical, reg
 ## What runs
 
 - Python solvers for fast parameter studies.
-- Notebook and scripts that save PNG figures and CSV/JSON statistics.
+- Notebook and scripts that display/save PNG figures and CSV/JSON statistics.
 - FastAPI + HTML interface for sliders and plots.
 - Optional OpenFOAM adapter for higher-fidelity CFD checks.
 
