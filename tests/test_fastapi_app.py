@@ -31,3 +31,10 @@ def test_fastapi_endpoints_smoke():
     status = client.get("/api/openfoam/status")
     assert status.status_code == 200
     assert "installed" in status.json()
+
+    openfoam = client.post(
+        "/api/run_openfoam",
+        json={"D": 80, "U": 100, "total_time": 0.05},
+    )
+    assert openfoam.status_code == 200
+    assert "completed" in openfoam.json()

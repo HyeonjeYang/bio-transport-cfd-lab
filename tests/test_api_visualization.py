@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import numpy as np
+
 from biotransport_lab.api import (
     csv_from_payload,
     get_presets,
@@ -32,6 +34,25 @@ def test_api_serialization_payloads():
     assert payload["kind"] == "cartesian"
     assert "sensor_concentration" in payload["diagnostics"]
     assert "time_s" in csv_from_payload(payload)
+
+
+def test_default_educational_presets_are_numerically_reasonable():
+    cartesian = simulate_cartesian_preset(preset="microchannel_biosensor", total_time_s=0.05)
+    assert np.isfinite(cartesian.frames).all()
+    assert float(cartesian.frames.min()) >= 0.0
+    assert cartesian.metadata["dt_s"] > 0
+    assert cartesian.dimensionless["Pe"]["value"] > 1.0
+    assert cartesian.total_mass[-1] >= 0.0
+
+    radial = simulate_radial_preset(
+        preset="spherical_cell_uptake",
+        radius_um=10.0,
+        total_time_s=0.05,
+    )
+    assert np.isfinite(radial.profiles).all()
+    assert float(radial.profiles.min()) >= 0.0
+    assert radial.metadata["tau_diffusion_s"] > 0
+    assert radial.boundary_flux[-1] >= 0.0
 
 
 def test_png_generation_smoke(tmp_path: Path):

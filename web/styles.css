@@ -124,6 +124,10 @@ button:disabled {
   font-size: 13px;
 }
 
+#openfoamResult {
+  overflow-wrap: anywhere;
+}
+
 .workspace {
   display: grid;
   grid-template-rows: minmax(420px, 1fr) auto;

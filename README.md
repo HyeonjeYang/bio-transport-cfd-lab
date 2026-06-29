@@ -4,6 +4,8 @@ Undergraduate teaching lab for biological transport: diffusion, advection-reacti
 
 This is for classroom learning, not production CFD.
 
+이 저장소는 2026 서울대학교 여름학기 `생물물리학입문` 특강을 위한 교육자료입니다.
+
 ## Attribution and Use
 
 Ideas, equations, biological examples, and teaching direction: Hyeonje Yang.
@@ -104,6 +106,12 @@ OpenFOAM status:
 python -c "from biotransport_lab.openfoam_adapter import get_openfoam_status; print(get_openfoam_status())"
 ```
 
+Optional OpenFOAM run:
+
+```bash
+python scripts/run_openfoam_case.py --D 80 --U 200 --total-time 0.2 --outdir openfoam/cases/demo
+```
+
 ## Examples
 
 - Random walk to diffusion.
@@ -126,6 +134,14 @@ python -c "from biotransport_lab.openfoam_adapter import get_openfoam_status; pr
 ## Limits
 
 The Python models use prescribed flow, simplified reactions, and low-dimensional grids. They are meant to teach scaling and interpretation. Use OpenFOAM separately when flow physics or geometry detail matters.
+
+## Model Checks
+
+Default teaching presets are tested for finite, nonnegative concentrations, stable timesteps, radial flux direction, and no-flux diffusion mass conservation. These checks support classroom use, not research validation.
+
+## External Tools
+
+Built with Python, NumPy, Matplotlib, FastAPI, Plotly.js, and pytest. Optional high-fidelity runs use OpenFOAM (`blockMesh`, `scalarTransportFoam`) if installed separately.
 
 ## License
 

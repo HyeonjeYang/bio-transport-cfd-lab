@@ -1,6 +1,7 @@
 const sliderIds = ["D", "U", "k", "source_x", "source_y", "sensor_x", "sensor_y", "radius", "total_time"];
 let lastParams = null;
 let lastPayload = null;
+let isRunning = false;
 
 function readParams() {
   const params = {
@@ -46,18 +47,26 @@ async function loadOpenFOAMStatus() {
   button.disabled = !status.installed;
   if (!status.installed) {
     button.classList.add("secondary");
+  } else {
+    button.classList.remove("secondary");
   }
 }
 
 async function runSimulation() {
+  if (isRunning) return;
+  setBusy(true, "Running Python...");
   lastParams = readParams();
-  const response = await fetch("/api/simulate", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(lastParams),
-  });
-  lastPayload = await response.json();
-  renderPayload(lastPayload);
+  try {
+    const response = await fetch("/api/simulate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(lastParams),
+    });
+    lastPayload = await response.json();
+    renderPayload(lastPayload);
+  } finally {
+    setBusy(false);
+  }
 }
 
 function renderPayload(payload) {
@@ -160,6 +169,19 @@ function renderMetadata(diagnostics) {
   ].join("<br>");
 }
 
+function setBusy(running, label = "Running...") {
+  isRunning = running;
+  const runButton = document.getElementById("runButton");
+  const openfoamButton = document.getElementById("openfoamButton");
+  runButton.disabled = running;
+  runButton.textContent = running ? label : "Run Python";
+  if (running) {
+    openfoamButton.disabled = true;
+  } else {
+    loadOpenFOAMStatus();
+  }
+}
+
 async function exportPng() {
   const params = lastParams || readParams();
   const response = await fetch("/api/export_png", {
@@ -202,9 +224,23 @@ function resetControls() {
 }
 
 async function runOpenFOAM() {
-  const response = await fetch("/api/run_openfoam", { method: "POST" });
-  const data = await response.json();
-  document.getElementById("openfoamStatus").textContent = data.message;
+  if (isRunning) return;
+  setBusy(true, "Running...");
+  const params = lastParams || readParams();
+  const result = document.getElementById("openfoamResult");
+  result.textContent = "OpenFOAM case is running.";
+  try {
+    const response = await fetch("/api/run_openfoam", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params),
+    });
+    const data = await response.json();
+    document.getElementById("openfoamStatus").textContent = data.message;
+    result.textContent = data.result_csv ? `CSV: ${data.result_csv}` : data.message;
+  } finally {
+    setBusy(false);
+  }
 }
 
 async function start() {

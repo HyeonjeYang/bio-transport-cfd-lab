@@ -14,9 +14,15 @@ foamVersion
 
 The Python adapter checks this command. If it is missing, the web app disables OpenFOAM controls and continues with Python simulations.
 
-## Case Skeleton
+## Runnable Teaching Case
 
-The adapter can create a simple case directory under `openfoam/cases/`. It does not make normal tests depend on OpenFOAM and does not run CFD automatically on every browser slider change.
+The adapter can create and run a small `scalarTransportFoam` microchannel case:
+
+```bash
+python scripts/run_openfoam_case.py --D 80 --U 200 --total-time 0.2 --outdir openfoam/cases/demo
+```
+
+It runs `blockMesh`, then `scalarTransportFoam`, then writes `postProcessing/latest_T.csv` when a scalar field is available. It does not make normal tests depend on OpenFOAM and does not run CFD automatically on every browser slider change.
 
 Suggested exercises:
 

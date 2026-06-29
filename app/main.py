@@ -14,7 +14,11 @@ from biotransport_lab.api import (
     get_presets,
     run_preset_for_payload,
 )
-from biotransport_lab.openfoam_adapter import get_openfoam_status, run_openfoam_case
+from biotransport_lab.openfoam_adapter import (
+    OpenFOAMCaseConfig,
+    get_openfoam_status,
+    run_openfoam_case,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 WEB_DIR = ROOT / "web"
@@ -72,10 +76,12 @@ def api_export_csv(request: SimulationRequest) -> Response:
 
 
 @app.post("/api/run_openfoam")
-def api_run_openfoam() -> JSONResponse:
-    return JSONResponse(run_openfoam_case())
+def api_run_openfoam(request: SimulationRequest | None = None) -> JSONResponse:
+    params = {} if request is None else request.model_dump()
+    config = OpenFOAMCaseConfig.from_web_params(params)
+    return JSONResponse(run_openfoam_case(config=config))
 
 
 @app.get("/api/openfoam/status")
-def api_openfoam_status() -> dict[str, bool | str | None]:
+def api_openfoam_status() -> dict[str, Any]:
     return get_openfoam_status()
