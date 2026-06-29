@@ -4,7 +4,7 @@ Undergraduate teaching lab for biological transport: diffusion, advection-reacti
 
 This is for classroom learning, not production CFD.
 
-이 저장소는 2026 서울대학교 여름학기 `생물물리학입문` 특강을 위한 교육자료입니다.
+이 repository는 2026 서울대학교 여름학기 `생물물리학입문` 특강을 위한 교육자료입니다.
 
 ## Attribution and Use
 
