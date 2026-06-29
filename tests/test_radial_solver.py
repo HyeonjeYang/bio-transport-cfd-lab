@@ -54,3 +54,20 @@ def test_absorbing_boundary_gives_positive_outward_flux_and_mass_loss():
     assert result.boundary_flux[-1] > 0.0
     assert result.total_mass[-1] < result.total_mass[0]
     assert result.metadata["flux_sign"] == "Positive boundary flux is outward from r=0 toward r=R."
+
+
+def test_radial_diagnostics_can_be_downsampled():
+    domain = RadialDomain(radius_um=12.0, nr=41, geometry="spherical")
+    config = SimulationConfig(total_time_s=0.05, save_frames=3, max_diagnostic_points=6)
+    result = simulate_radial_transport(
+        domain=domain,
+        params=TransportParameters(D_um2_s=40.0, U_um_s=0.0, k_s=0.0),
+        config=config,
+        source=SourceConfig(strength_conc_s=0.0),
+        boundary=BoundaryConfig(radial_outer="absorbing"),
+        initial_concentration=uniform_radial_initial(domain, 1.0),
+    )
+
+    assert len(result.diagnostic_times_s) <= config.max_diagnostic_points
+    assert result.diagnostic_times_s[0] == 0.0
+    assert np.isclose(result.diagnostic_times_s[-1], config.total_time_s)

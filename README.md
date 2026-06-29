@@ -100,6 +100,37 @@ Notebook:
 jupyter notebook notebooks/BioTransport_CFD_Lab.ipynb
 ```
 
+## Integration
+
+Install into another Python project:
+
+```bash
+python -m pip install "bio-transport-cfd-lab @ git+https://github.com/HyeonjeYang/bio-transport-cfd-lab.git"
+```
+
+Python call:
+
+```python
+from biotransport_lab.api import run_preset_for_payload
+
+payload = run_preset_for_payload({"preset": "microchannel_biosensor", "D": 80, "U": 200, "k": 0.02})
+```
+
+Local API call:
+
+```bash
+uvicorn app.main:app --reload
+curl -X POST http://127.0.0.1:8000/api/simulate -H "Content-Type: application/json" -d '{"preset":"microchannel_biosensor","D":80,"U":200,"k":0.02}'
+```
+
+PowerShell:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/api/simulate -Method Post -ContentType "application/json" -Body '{"preset":"microchannel_biosensor","D":80,"U":200,"k":0.02}'
+```
+
+OpenFOAM can be linked through `scripts/run_openfoam_case.py` or `POST /api/run_openfoam`. The Python solver remains the default fast path.
+
 OpenFOAM status:
 
 ```bash
@@ -134,6 +165,8 @@ python scripts/run_openfoam_case.py --D 80 --U 200 --total-time 0.2 --outdir ope
 ## Limits
 
 The Python models use prescribed flow, simplified reactions, and low-dimensional grids. They are meant to teach scaling and interpretation. Use OpenFOAM separately when flow physics or geometry detail matters.
+
+Long diagnostic curves are downsampled with `SimulationConfig.max_diagnostic_points` for faster browser and CSV workflows. Saved frames and final values are still kept.
 
 ## Model Checks
 

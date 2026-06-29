@@ -7,6 +7,8 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 
+_VECTOR_RANDOM_VALUE_LIMIT = 3_000_000
+
 
 @dataclass
 class RandomWalkResult:
@@ -52,10 +54,18 @@ def simulate_random_walk(
     times = np.arange(steps + 1, dtype=float) * dt_s
     msd = np.zeros(steps + 1, dtype=float)
     step_std = np.sqrt(2.0 * D_um2_s * dt_s)
-
-    for step in range(1, steps + 1):
-        positions += rng.normal(0.0, step_std, size=positions.shape)
-        msd[step] = float(np.mean(np.sum(positions**2, axis=1)))
+    value_count = particles * steps * dimensions
+    if value_count <= _VECTOR_RANDOM_VALUE_LIMIT:
+        paths = rng.normal(0.0, step_std, size=(steps, particles, dimensions))
+        np.cumsum(paths, axis=0, out=paths)
+        positions = paths[-1].copy()
+        msd[1:] = np.mean(np.einsum("spd,spd->sp", paths, paths), axis=1)
+        run_mode = "vectorized"
+    else:
+        for step in range(1, steps + 1):
+            positions += rng.normal(0.0, step_std, size=positions.shape)
+            msd[step] = float(np.mean(np.sum(positions**2, axis=1)))
+        run_mode = "streaming"
 
     expected = 2.0 * dimensions * D_um2_s * times
     metadata = {
@@ -65,6 +75,7 @@ def simulate_random_walk(
         "dt_s": dt_s,
         "dimensions": dimensions,
         "seed": "None" if seed is None else seed,
+        "run_mode": run_mode,
         "msd_reference": "1D: <x^2> = 2Dt; 2D: <r^2> = 4Dt.",
     }
     return RandomWalkResult(

@@ -50,6 +50,19 @@ class RadialSimulationResult:
         }
 
 
+@dataclass
+class _RadialWorkspace:
+    """Reusable arrays for one explicit radial update."""
+
+    laplacian: NDArray[np.float64]
+    rate: NDArray[np.float64]
+    scratch: NDArray[np.float64]
+
+    @classmethod
+    def empty_like(cls, concentration: NDArray[np.float64]) -> _RadialWorkspace:
+        return cls(*(np.empty_like(concentration) for _ in range(3)))
+
+
 def radial_grid(domain: RadialDomain) -> NDArray[np.float64]:
     """Return radial grid points in um."""
 
@@ -94,7 +107,8 @@ def simulate_radial_transport(
 
     r = radial_grid(domain)
     concentration = _prepare_initial(domain, initial_concentration)
-    concentration = _apply_outer_boundary(concentration, domain, params, boundary)
+    _apply_outer_boundary_inplace(concentration, domain, params, boundary)
+    next_concentration = np.empty_like(concentration)
     dt_s, warnings = _stable_radial_timestep(domain, params, config)
     steps = max(1, int(np.ceil(config.total_time_s / dt_s)))
     dt_s = config.total_time_s / steps
@@ -102,6 +116,19 @@ def simulate_radial_transport(
         raise ValueError("Stable timestep requires more steps than max_steps allows.")
 
     source_mask = np.abs(r - source.r_um) <= source.radius_um
+    source_term = np.zeros_like(concentration)
+    if source.strength_conc_s != 0.0:
+        source_term[source_mask] = source.strength_conc_s
+    source_has_value = bool(np.any(source_term))
+    sensor_mask = np.zeros_like(concentration, dtype=bool)
+    if sensor.r_um is not None and sensor.absorption_rate_s > 0:
+        sensor_mask = np.abs(r - sensor.r_um) <= sensor.radius_um
+    sink_coefficient = np.full_like(concentration, params.k_s)
+    if sensor.absorption_rate_s > 0 and np.any(sensor_mask):
+        sink_coefficient[sensor_mask] += sensor.absorption_rate_s
+    lower_coeff, upper_coeff = _radial_laplacian_coefficients(r, domain)
+    workspace = _RadialWorkspace.empty_like(concentration)
+    diagnostic_stride = _diagnostic_stride(steps, config.max_diagnostic_points)
     save_times = np.linspace(0.0, config.total_time_s, config.save_frames)
     next_save = 1
     frames = [concentration.copy()]
@@ -111,30 +138,36 @@ def simulate_radial_transport(
     flux_series = [_outer_flux(concentration, domain, params)]
 
     time_s = 0.0
-    for _ in range(steps):
-        concentration = _advance_radial(
+    for step_index in range(1, steps + 1):
+        _advance_radial(
             concentration,
-            r,
             domain,
             params,
             source,
-            source_mask,
-            sensor,
+            source_term,
+            source_has_value,
+            sink_coefficient,
+            lower_coeff,
+            upper_coeff,
             boundary,
             time_s,
             dt_s,
+            workspace,
+            next_concentration,
         )
+        concentration, next_concentration = next_concentration, concentration
         time_s += dt_s
 
         min_value = float(concentration.min())
         if min_value < 0.0:
             if min_value < -1e-8:
                 warnings.append("Negative concentrations were clipped after an explicit radial step.")
-            concentration = np.maximum(concentration, 0.0)
+            np.maximum(concentration, 0.0, out=concentration)
 
-        diagnostic_times.append(time_s)
-        mass_series.append(_radial_mass(concentration, r, domain.geometry))
-        flux_series.append(_outer_flux(concentration, domain, params))
+        if step_index == steps or step_index % diagnostic_stride == 0:
+            diagnostic_times.append(time_s)
+            mass_series.append(_radial_mass(concentration, r, domain.geometry))
+            flux_series.append(_outer_flux(concentration, domain, params))
 
         while next_save < len(save_times) and time_s >= save_times[next_save] - 0.5 * dt_s:
             frames.append(concentration.copy())
@@ -151,6 +184,8 @@ def simulate_radial_transport(
         {
             "dt_s": dt_s,
             "steps": steps,
+            "diagnostic_stride": diagnostic_stride,
+            "diagnostic_points": len(diagnostic_times),
             "tau_diffusion_s": domain.radius_um**2 / params.D_um2_s,
             "flux_sign": "Positive boundary flux is outward from r=0 toward r=R.",
             "units": {
@@ -222,40 +257,42 @@ def _stable_radial_timestep(
 
 def _advance_radial(
     concentration: NDArray[np.float64],
-    r: NDArray[np.float64],
     domain: RadialDomain,
     params: TransportParameters,
     source: SourceConfig,
-    source_mask: NDArray[np.bool_],
-    sensor: SensorConfig,
+    source_term: NDArray[np.float64],
+    source_has_value: bool,
+    sink_coefficient: NDArray[np.float64],
+    lower_coeff: NDArray[np.float64],
+    upper_coeff: NDArray[np.float64],
     boundary: BoundaryConfig,
     time_s: float,
     dt_s: float,
-) -> NDArray[np.float64]:
-    concentration = _apply_outer_boundary(concentration, domain, params, boundary)
-    dr = domain.dr_um
-    alpha = 1.0 if domain.geometry == "cylindrical" else 2.0
-    dimension = alpha + 1.0
+    workspace: _RadialWorkspace,
+    out: NDArray[np.float64],
+) -> None:
+    _apply_outer_boundary_inplace(concentration, domain, params, boundary)
+    inv_dr2 = 1.0 / domain.dr_um**2
+    dimension = 2.0 if domain.geometry == "cylindrical" else 3.0
 
-    laplacian = np.zeros_like(concentration)
-    laplacian[0] = 2.0 * dimension * (concentration[1] - concentration[0]) / dr**2
+    workspace.laplacian.fill(0.0)
+    workspace.laplacian[0] = 2.0 * dimension * (concentration[1] - concentration[0]) * inv_dr2
+    np.multiply(lower_coeff, concentration[:-2], out=workspace.laplacian[1:-1])
+    workspace.laplacian[1:-1] -= 2.0 * inv_dr2 * concentration[1:-1]
+    workspace.laplacian[1:-1] += upper_coeff * concentration[2:]
 
-    interior = slice(1, -1)
-    d2cdr2 = (concentration[2:] - 2.0 * concentration[1:-1] + concentration[:-2]) / dr**2
-    dcdr = (concentration[2:] - concentration[:-2]) / (2.0 * dr)
-    laplacian[interior] = d2cdr2 + alpha * dcdr / r[1:-1]
+    np.multiply(workspace.laplacian, params.D_um2_s, out=workspace.rate)
+    np.multiply(sink_coefficient, concentration, out=workspace.scratch)
+    workspace.rate -= workspace.scratch
+    source_is_active = source.start_s <= time_s and (
+        source.end_s is None or time_s <= source.end_s
+    )
+    if source_has_value and source_is_active:
+        workspace.rate += source_term
 
-    source_term = np.zeros_like(concentration)
-    if source.start_s <= time_s and (source.end_s is None or time_s <= source.end_s):
-        source_term[source_mask] = source.strength_conc_s
-
-    sink = params.k_s * concentration
-    if sensor.r_um is not None and sensor.absorption_rate_s > 0:
-        sensor_mask = np.abs(r - sensor.r_um) <= sensor.radius_um
-        sink = sink + sensor.absorption_rate_s * concentration * sensor_mask
-
-    updated = concentration + dt_s * (params.D_um2_s * laplacian - sink + source_term)
-    return _apply_outer_boundary(updated, domain, params, boundary)
+    np.multiply(workspace.rate, dt_s, out=out)
+    out += concentration
+    _apply_outer_boundary_inplace(out, domain, params, boundary)
 
 
 def _apply_outer_boundary(
@@ -265,6 +302,16 @@ def _apply_outer_boundary(
     boundary: BoundaryConfig,
 ) -> NDArray[np.float64]:
     updated = concentration.copy()
+    _apply_outer_boundary_inplace(updated, domain, params, boundary)
+    return updated
+
+
+def _apply_outer_boundary_inplace(
+    updated: NDArray[np.float64],
+    domain: RadialDomain,
+    params: TransportParameters,
+    boundary: BoundaryConfig,
+) -> None:
     if boundary.radial_outer == "fixed":
         updated[-1] = boundary.outer_concentration
     elif boundary.radial_outer == "absorbing":
@@ -278,7 +325,6 @@ def _apply_outer_boundary(
             updated[-1] = updated[-2]
     else:
         raise ValueError(f"Unsupported radial outer boundary: {boundary.radial_outer}")
-    return updated
 
 
 def _outer_flux(
@@ -311,3 +357,19 @@ def _steady_state_label(profiles: NDArray[np.float64], tolerance: float) -> str:
     if numerator / denominator < tolerance:
         return "approximate steady state"
     return "final simulated state"
+
+
+def _radial_laplacian_coefficients(
+    r: NDArray[np.float64], domain: RadialDomain
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    dr = domain.dr_um
+    inv_dr2 = 1.0 / dr**2
+    alpha = 1.0 if domain.geometry == "cylindrical" else 2.0
+    drift = alpha / (2.0 * dr * r[1:-1])
+    return inv_dr2 - drift, inv_dr2 + drift
+
+
+def _diagnostic_stride(steps: int, max_points: int | None) -> int:
+    if max_points is None or steps + 1 <= max_points:
+        return 1
+    return max(1, int(np.ceil(steps / (max_points - 1))))

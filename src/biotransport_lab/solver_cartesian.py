@@ -58,6 +58,25 @@ class CartesianSimulationResult:
         }
 
 
+@dataclass
+class _CartesianWorkspace:
+    """Reusable arrays for one explicit Cartesian update."""
+
+    left: NDArray[np.float64]
+    right: NDArray[np.float64]
+    down: NDArray[np.float64]
+    up: NDArray[np.float64]
+    dcdx: NDArray[np.float64]
+    dcdy: NDArray[np.float64]
+    laplacian: NDArray[np.float64]
+    rate: NDArray[np.float64]
+    scratch: NDArray[np.float64]
+
+    @classmethod
+    def empty_like(cls, concentration: NDArray[np.float64]) -> _CartesianWorkspace:
+        return cls(*(np.empty_like(concentration) for _ in range(9)))
+
+
 def gaussian_initial_condition(
     domain: CartesianDomain,
     *,
@@ -103,52 +122,87 @@ def simulate_cartesian_transport(
         raise ValueError("Stable timestep requires more steps than max_steps allows.")
 
     concentration = _prepare_initial_concentration(domain, initial_concentration)
-    concentration = _apply_cartesian_boundaries(concentration, boundary)
+    _apply_cartesian_boundaries_inplace(concentration, boundary)
+    next_concentration = np.empty_like(concentration)
 
     source_mask = _circle_mask(x, y, source.x_um, source.y_um, source.radius_um)
     sensor_mask = _circle_mask(x, y, sensor.x_um, sensor.y_um, sensor.radius_um)
+    sensor_cell_count = int(np.count_nonzero(sensor_mask))
+    source_term = np.zeros_like(concentration)
+    if source.strength_conc_s != 0.0:
+        source_term[source_mask] = source.strength_conc_s
+    source_has_value = bool(np.any(source_term))
+    sink_coefficient = np.full_like(concentration, params.k_s)
+    if sensor.absorption_rate_s > 0 and sensor_cell_count:
+        sink_coefficient[sensor_mask] += sensor.absorption_rate_s
+    u_forward_mask = u < 0.0
+    v_forward_mask = v < 0.0
+    has_u_forward = bool(np.any(u_forward_mask))
+    has_v_forward = bool(np.any(v_forward_mask))
+    workspace = _CartesianWorkspace.empty_like(concentration)
     cell_area = domain.dx_um * domain.dy_um
+    diagnostic_stride = _diagnostic_stride(steps, config.max_diagnostic_points)
 
     save_times = np.linspace(0.0, config.total_time_s, config.save_frames)
     next_save = 1
     frames = [concentration.copy()]
     frame_times = [0.0]
     diagnostic_times = [0.0]
-    sensor_series = [_masked_mean(concentration, sensor_mask)]
+    sensor_series = [_masked_mean(concentration, sensor_mask, sensor_cell_count)]
     mass_series = [_mass(concentration, cell_area)]
-    absorption_series = [_sensor_absorption(concentration, sensor_mask, sensor, cell_area)]
+    absorption_series = [
+        _sensor_absorption(concentration, sensor_mask, sensor, cell_area, sensor_cell_count)
+    ]
     outlet_series = [_outlet_flux(concentration, u, params.D_um2_s, domain.dx_um, domain.dy_um)]
     warnings = list(dt_warnings)
 
     time_s = 0.0
-    for _ in range(steps):
-        concentration = _advance_one_step(
+    for step_index in range(1, steps + 1):
+        _advance_one_step(
             concentration,
             u,
             v,
             params,
             domain,
             source,
-            source_mask,
-            sensor,
-            sensor_mask,
+            source_term,
+            source_has_value,
+            sink_coefficient,
+            u_forward_mask,
+            v_forward_mask,
+            has_u_forward,
+            has_v_forward,
             boundary,
             time_s,
             dt_s,
+            workspace,
+            next_concentration,
         )
+        concentration, next_concentration = next_concentration, concentration
         time_s += dt_s
 
         min_value = float(concentration.min())
         if min_value < 0.0:
             if min_value < -1e-8:
                 warnings.append("Negative concentrations were clipped after an explicit step.")
-            concentration = np.maximum(concentration, 0.0)
+            np.maximum(concentration, 0.0, out=concentration)
 
-        diagnostic_times.append(time_s)
-        sensor_series.append(_masked_mean(concentration, sensor_mask))
-        mass_series.append(_mass(concentration, cell_area))
-        absorption_series.append(_sensor_absorption(concentration, sensor_mask, sensor, cell_area))
-        outlet_series.append(_outlet_flux(concentration, u, params.D_um2_s, domain.dx_um, domain.dy_um))
+        if step_index == steps or step_index % diagnostic_stride == 0:
+            diagnostic_times.append(time_s)
+            sensor_series.append(_masked_mean(concentration, sensor_mask, sensor_cell_count))
+            mass_series.append(_mass(concentration, cell_area))
+            absorption_series.append(
+                _sensor_absorption(
+                    concentration,
+                    sensor_mask,
+                    sensor,
+                    cell_area,
+                    sensor_cell_count,
+                )
+            )
+            outlet_series.append(
+                _outlet_flux(concentration, u, params.D_um2_s, domain.dx_um, domain.dy_um)
+            )
 
         while next_save < len(save_times) and time_s >= save_times[next_save] - 0.5 * dt_s:
             frames.append(concentration.copy())
@@ -176,6 +230,8 @@ def simulate_cartesian_transport(
             "flow_kind": flow_kind,
             "dt_s": dt_s,
             "steps": steps,
+            "diagnostic_stride": diagnostic_stride,
+            "diagnostic_points": len(diagnostic_times),
             "units": {
                 "length": "um",
                 "time": "s",
@@ -261,45 +317,77 @@ def _advance_one_step(
     params: TransportParameters,
     domain: CartesianDomain,
     source: SourceConfig,
-    source_mask: NDArray[np.bool_],
-    sensor: SensorConfig,
-    sensor_mask: NDArray[np.bool_],
+    source_term: NDArray[np.float64],
+    source_has_value: bool,
+    sink_coefficient: NDArray[np.float64],
+    u_forward_mask: NDArray[np.bool_],
+    v_forward_mask: NDArray[np.bool_],
+    has_u_forward: bool,
+    has_v_forward: bool,
     boundary: BoundaryConfig,
     time_s: float,
     dt_s: float,
-) -> NDArray[np.float64]:
-    concentration = _apply_cartesian_boundaries(concentration, boundary)
-    left, right, down, up = _neighbors(concentration)
+    workspace: _CartesianWorkspace,
+    out: NDArray[np.float64],
+) -> None:
+    _apply_cartesian_boundaries_inplace(concentration, boundary)
+    _fill_neighbors(
+        concentration,
+        workspace.left,
+        workspace.right,
+        workspace.down,
+        workspace.up,
+    )
     dx = domain.dx_um
     dy = domain.dy_um
 
-    dcdx = np.where(u >= 0.0, (concentration - left) / dx, (right - concentration) / dx)
-    dcdy = np.where(v >= 0.0, (concentration - down) / dy, (up - concentration) / dy)
-    laplacian = (right - 2.0 * concentration + left) / dx**2
-    laplacian += (up - 2.0 * concentration + down) / dy**2
+    np.subtract(concentration, workspace.left, out=workspace.dcdx)
+    workspace.dcdx /= dx
+    if has_u_forward:
+        workspace.dcdx[u_forward_mask] = (
+            workspace.right[u_forward_mask] - concentration[u_forward_mask]
+        ) / dx
 
-    source_term = np.zeros_like(concentration)
-    if source.start_s <= time_s and (source.end_s is None or time_s <= source.end_s):
-        source_term[source_mask] = source.strength_conc_s
+    np.subtract(concentration, workspace.down, out=workspace.dcdy)
+    workspace.dcdy /= dy
+    if has_v_forward:
+        workspace.dcdy[v_forward_mask] = (
+            workspace.up[v_forward_mask] - concentration[v_forward_mask]
+        ) / dy
 
-    sink_term = params.k_s * concentration
-    if sensor.absorption_rate_s > 0:
-        sink_term = sink_term + sensor.absorption_rate_s * concentration * sensor_mask
+    np.add(workspace.right, workspace.left, out=workspace.laplacian)
+    workspace.laplacian -= 2.0 * concentration
+    workspace.laplacian /= dx**2
+    np.add(workspace.up, workspace.down, out=workspace.scratch)
+    workspace.scratch -= 2.0 * concentration
+    workspace.scratch /= dy**2
+    workspace.laplacian += workspace.scratch
 
-    updated = concentration + dt_s * (
-        -u * dcdx - v * dcdy + params.D_um2_s * laplacian - sink_term + source_term
+    np.multiply(u, workspace.dcdx, out=workspace.rate)
+    workspace.rate *= -1.0
+    np.multiply(v, workspace.dcdy, out=workspace.scratch)
+    workspace.rate -= workspace.scratch
+    workspace.rate += params.D_um2_s * workspace.laplacian
+    np.multiply(sink_coefficient, concentration, out=workspace.scratch)
+    workspace.rate -= workspace.scratch
+    source_is_active = source.start_s <= time_s and (
+        source.end_s is None or time_s <= source.end_s
     )
-    return _apply_cartesian_boundaries(updated, boundary)
+    if source_has_value and source_is_active:
+        workspace.rate += source_term
+
+    np.multiply(workspace.rate, dt_s, out=out)
+    out += concentration
+    _apply_cartesian_boundaries_inplace(out, boundary)
 
 
-def _neighbors(
+def _fill_neighbors(
     concentration: NDArray[np.float64],
-) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
-    left = np.empty_like(concentration)
-    right = np.empty_like(concentration)
-    down = np.empty_like(concentration)
-    up = np.empty_like(concentration)
-
+    left: NDArray[np.float64],
+    right: NDArray[np.float64],
+    down: NDArray[np.float64],
+    up: NDArray[np.float64],
+) -> None:
     left[:, 1:] = concentration[:, :-1]
     left[:, 0] = concentration[:, 0]
     right[:, :-1] = concentration[:, 1:]
@@ -308,13 +396,19 @@ def _neighbors(
     down[0, :] = concentration[0, :]
     up[:-1, :] = concentration[1:, :]
     up[-1, :] = concentration[-1, :]
-    return left, right, down, up
 
 
 def _apply_cartesian_boundaries(
     concentration: NDArray[np.float64], boundary: BoundaryConfig
 ) -> NDArray[np.float64]:
     updated = concentration.copy()
+    _apply_cartesian_boundaries_inplace(updated, boundary)
+    return updated
+
+
+def _apply_cartesian_boundaries_inplace(
+    updated: NDArray[np.float64], boundary: BoundaryConfig
+) -> None:
     if boundary.inlet_concentration is not None:
         updated[:, 0] = boundary.inlet_concentration
     else:
@@ -334,7 +428,6 @@ def _apply_cartesian_boundaries(
         updated[-1, :] = boundary.outer_concentration
     else:
         raise ValueError(f"Unsupported wall boundary: {boundary.walls}")
-    return updated
 
 
 def _circle_mask(
@@ -343,10 +436,12 @@ def _circle_mask(
     return (x - center_x) ** 2 + (y - center_y) ** 2 <= radius**2
 
 
-def _masked_mean(concentration: NDArray[np.float64], mask: NDArray[np.bool_]) -> float:
-    if not np.any(mask):
+def _masked_mean(
+    concentration: NDArray[np.float64], mask: NDArray[np.bool_], cell_count: int
+) -> float:
+    if cell_count == 0:
         return float("nan")
-    return float(np.mean(concentration[mask]))
+    return float(np.sum(concentration[mask]) / cell_count)
 
 
 def _mass(concentration: NDArray[np.float64], cell_area: float) -> float:
@@ -358,8 +453,9 @@ def _sensor_absorption(
     mask: NDArray[np.bool_],
     sensor: SensorConfig,
     cell_area: float,
+    cell_count: int,
 ) -> float:
-    if sensor.absorption_rate_s <= 0 or not np.any(mask):
+    if sensor.absorption_rate_s <= 0 or cell_count == 0:
         return 0.0
     return float(sensor.absorption_rate_s * np.sum(concentration[mask]) * cell_area)
 
@@ -384,3 +480,9 @@ def _steady_state_label(frames: NDArray[np.float64], tolerance: float) -> str:
     if numerator / denominator < tolerance:
         return "approximate steady state"
     return "final simulated state"
+
+
+def _diagnostic_stride(steps: int, max_points: int | None) -> int:
+    if max_points is None or steps + 1 <= max_points:
+        return 1
+    return max(1, int(np.ceil(steps / (max_points - 1))))

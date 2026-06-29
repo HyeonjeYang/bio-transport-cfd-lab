@@ -21,3 +21,5 @@ def test_simulation_config_validation():
     assert config.total_time_s == 1.0
     with pytest.raises(ValueError):
         SimulationConfig(total_time_s=-1.0)
+    with pytest.raises(ValueError):
+        SimulationConfig(max_diagnostic_points=1)

@@ -18,6 +18,15 @@ def test_random_walk_2d_msd_scaling():
     expected = 4.0 * 5.0 * 200 * 0.01
     np.testing.assert_allclose(result.msd_um2[-1], expected, rtol=0.18)
     assert result.positions.shape == (6000, 2)
+    assert result.metadata["run_mode"] == "vectorized"
+
+
+def test_random_walk_uses_streaming_for_large_runs():
+    result = simulate_random_walk(
+        particles=3001, steps=500, D_um2_s=5.0, dt_s=0.01, dimensions=2, seed=4
+    )
+    assert result.metadata["run_mode"] == "streaming"
+    assert result.positions.shape == (3001, 2)
 
 
 def test_gaussian_pdf_is_finite_and_positive():

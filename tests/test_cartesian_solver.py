@@ -54,3 +54,20 @@ def test_cartesian_solver_nonnegative_and_serializable():
     summary = result.to_json_summary()
     assert summary["state_label"] in {"approximate steady state", "final simulated state"}
     assert "Pe" in summary["dimensionless"]
+
+
+def test_cartesian_diagnostics_can_be_downsampled():
+    domain = CartesianDomain(width_um=80.0, height_um=40.0, nx=21, ny=13)
+    config = SimulationConfig(total_time_s=0.2, save_frames=3, max_diagnostic_points=5)
+    result = simulate_cartesian_transport(
+        domain=domain,
+        params=TransportParameters(D_um2_s=40.0, U_um_s=60.0, k_s=0.01),
+        config=config,
+        source=SourceConfig(x_um=10.0, y_um=20.0, strength_conc_s=1.0),
+        sensor=SensorConfig(x_um=60.0, y_um=20.0, absorption_rate_s=0.1),
+        flow_kind="poiseuille",
+    )
+
+    assert len(result.diagnostic_times_s) <= config.max_diagnostic_points
+    assert result.diagnostic_times_s[0] == 0.0
+    assert np.isclose(result.diagnostic_times_s[-1], config.total_time_s)

@@ -85,6 +85,7 @@ class SimulationConfig:
         diffusion_safety: Safety factor for explicit diffusion.
         steady_tolerance: Relative late-frame change used for steady-like labels.
         max_steps: Upper step count guard for classroom runs.
+        max_diagnostic_points: Maximum saved diagnostic samples, including t = 0 and final time.
     """
 
     total_time_s: float = 2.0
@@ -94,6 +95,7 @@ class SimulationConfig:
     diffusion_safety: float = 0.20
     steady_tolerance: float = 1e-3
     max_steps: int = 20000
+    max_diagnostic_points: int | None = 600
 
     def __post_init__(self) -> None:
         if self.total_time_s <= 0:
@@ -104,6 +106,8 @@ class SimulationConfig:
             raise ValueError("At least three frames are needed.")
         if self.max_steps < 1:
             raise ValueError("max_steps must be positive.")
+        if self.max_diagnostic_points is not None and self.max_diagnostic_points < 2:
+            raise ValueError("max_diagnostic_points must be at least two or None.")
 
 
 @dataclass(frozen=True)
