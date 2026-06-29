@@ -4,6 +4,13 @@ Undergraduate teaching lab for biological transport: diffusion, advection-reacti
 
 This is for classroom learning, not production CFD.
 
+## Attribution and Use
+
+Ideas, equations, biological examples, and teaching direction: Hyeonje Yang.
+Implementation was prepared with help from Codex.
+
+Educational use only. These models are not validated for research, clinical, regulatory, or engineering design use.
+
 ## What runs
 
 - Python solvers for fast parameter studies.
@@ -123,5 +130,3 @@ The Python models use prescribed flow, simplified reactions, and low-dimensional
 ## License
 
 Source code is MIT licensed. Documentation, notebooks, and generated educational figures are CC BY 4.0; see `LICENSE-docs.md`.
-
-No AI tool is listed as a co-author or contributor.
