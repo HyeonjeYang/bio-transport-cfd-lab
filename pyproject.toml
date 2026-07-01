@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bio-transport-cfd-lab"
-version = "0.1.4"
+version = "0.1.5"
 description = "Undergraduate biological transport teaching lab with Python solvers, notebooks, web demos, and optional OpenFOAM support."
 readme = "README.md"
 requires-python = ">=3.11"
