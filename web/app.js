@@ -38,20 +38,6 @@ async function loadPresets() {
   select.value = "microchannel_biosensor";
 }
 
-async function loadOpenFOAMStatus() {
-  const response = await fetch("/api/openfoam/status");
-  const status = await response.json();
-  const text = document.getElementById("openfoamStatus");
-  const button = document.getElementById("openfoamButton");
-  text.textContent = status.installed ? `installed: ${status.version}` : "not installed; Python solver enabled";
-  button.disabled = !status.installed;
-  if (!status.installed) {
-    button.classList.add("secondary");
-  } else {
-    button.classList.remove("secondary");
-  }
-}
-
 async function runSimulation() {
   if (isRunning) return;
   setBusy(true, "Running Python...");
@@ -69,22 +55,55 @@ async function runSimulation() {
   }
 }
 
+function renderFieldAnimation(payload) {
+  const zmax = Math.max(...payload.frames.map((frame) => Math.max(...frame.map((row) => Math.max(...row)))));
+  const frames = payload.frames.map((frame, index) => ({
+    name: String(index),
+    data: [{ z: frame }],
+  }));
+
+  Plotly.react("fieldPlot", [{
+    z: payload.frames[0],
+    x: payload.x_um,
+    y: payload.y_um,
+    type: "heatmap",
+    colorscale: "Viridis",
+    zmin: 0,
+    zmax: zmax || 1,
+    colorbar: { title: "C" },
+  }], {
+    title: "Concentration field over time",
+    xaxis: { title: "x (um)" },
+    yaxis: { title: "y (um)" },
+    margin: { t: 44, r: 20, b: 70, l: 54 },
+    updatemenus: [{
+      type: "buttons",
+      showactive: false,
+      x: 0,
+      y: -0.25,
+      buttons: [{
+        label: "Play",
+        method: "animate",
+        args: [null, { fromcurrent: true, frame: { duration: 500, redraw: true }, transition: { duration: 0 } }],
+      }],
+    }],
+    sliders: [{
+      active: 0,
+      y: -0.15,
+      pad: { t: 20 },
+      steps: payload.frame_times_s.map((time, index) => ({
+        label: `${time.toFixed(2)}s`,
+        method: "animate",
+        args: [[String(index)], { mode: "immediate", frame: { duration: 0, redraw: true }, transition: { duration: 0 } }],
+      })),
+    }],
+  }, { responsive: true });
+  Plotly.addFrames("fieldPlot", frames);
+}
+
 function renderPayload(payload) {
   if (payload.kind === "cartesian") {
-    const finalFrame = payload.frames[payload.frames.length - 1];
-    Plotly.react("fieldPlot", [{
-      z: finalFrame,
-      x: payload.x_um,
-      y: payload.y_um,
-      type: "heatmap",
-      colorscale: "Viridis",
-      colorbar: { title: "C" },
-    }], {
-      title: "Concentration field",
-      xaxis: { title: "x (um)" },
-      yaxis: { title: "y (um)" },
-      margin: { t: 44, r: 20, b: 46, l: 54 },
-    }, { responsive: true });
+    renderFieldAnimation(payload);
 
     Plotly.react("curvePlot", [
       {
@@ -172,29 +191,8 @@ function renderMetadata(diagnostics) {
 function setBusy(running, label = "Running...") {
   isRunning = running;
   const runButton = document.getElementById("runButton");
-  const openfoamButton = document.getElementById("openfoamButton");
   runButton.disabled = running;
   runButton.textContent = running ? label : "Run Python";
-  if (running) {
-    openfoamButton.disabled = true;
-  } else {
-    loadOpenFOAMStatus();
-  }
-}
-
-async function exportPng() {
-  const params = lastParams || readParams();
-  const response = await fetch("/api/export_png", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(params),
-  });
-  const data = await response.json();
-  const link = document.getElementById("downloadLink");
-  link.href = `data:image/png;base64,${data.content_base64}`;
-  link.download = data.filename;
-  link.hidden = false;
-  link.textContent = "Download PNG";
 }
 
 async function exportCsv() {
@@ -223,38 +221,15 @@ function resetControls() {
   updateSliderLabels();
 }
 
-async function runOpenFOAM() {
-  if (isRunning) return;
-  setBusy(true, "Running...");
-  const params = lastParams || readParams();
-  const result = document.getElementById("openfoamResult");
-  result.textContent = "OpenFOAM case is running.";
-  try {
-    const response = await fetch("/api/run_openfoam", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(params),
-    });
-    const data = await response.json();
-    document.getElementById("openfoamStatus").textContent = data.message;
-    result.textContent = data.result_csv ? `CSV: ${data.result_csv}` : data.message;
-  } finally {
-    setBusy(false);
-  }
-}
-
 async function start() {
   updateSliderLabels();
   for (const id of sliderIds) {
     document.getElementById(id).addEventListener("input", updateSliderLabels);
   }
   document.getElementById("runButton").addEventListener("click", runSimulation);
-  document.getElementById("exportPngButton").addEventListener("click", exportPng);
   document.getElementById("exportCsvButton").addEventListener("click", exportCsv);
   document.getElementById("resetButton").addEventListener("click", resetControls);
-  document.getElementById("openfoamButton").addEventListener("click", runOpenFOAM);
   await loadPresets();
-  await loadOpenFOAMStatus();
   await runSimulation();
 }
 

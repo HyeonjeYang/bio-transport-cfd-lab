@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import csv
 import io
 from pathlib import Path
@@ -294,37 +293,6 @@ def csv_from_payload(payload: dict[str, Any]) -> str:
         ):
             writer.writerow(row)
     return output.getvalue()
-
-
-def figure_png_base64_from_payload(payload: dict[str, Any]) -> str:
-    """Render the final simulated field to a base64 PNG string."""
-
-    import matplotlib
-
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
-    buffer = io.BytesIO()
-    fig, ax = plt.subplots(figsize=(5.0, 3.2), constrained_layout=True)
-    if payload["kind"] == "cartesian":
-        image = ax.imshow(
-            np.asarray(payload["frames"][-1]),
-            origin="lower",
-            aspect="auto",
-            cmap="viridis",
-        )
-        ax.set_title("Final concentration")
-        ax.set_xlabel("x index")
-        ax.set_ylabel("y index")
-        fig.colorbar(image, ax=ax, label="concentration")
-    else:
-        ax.plot(payload["r_um"], payload["profiles"][-1])
-        ax.set_title("Final radial profile")
-        ax.set_xlabel("radius (um)")
-        ax.set_ylabel("concentration")
-    fig.savefig(buffer, format="png", dpi=160)
-    plt.close(fig)
-    return base64.b64encode(buffer.getvalue()).decode("ascii")
 
 
 def write_cartesian_csv(result: CartesianSimulationResult, path: str | Path) -> Path:

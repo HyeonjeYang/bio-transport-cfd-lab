@@ -28,13 +28,9 @@ def test_fastapi_endpoints_smoke():
     assert response.status_code == 200
     assert response.json()["kind"] == "cartesian"
 
-    status = client.get("/api/openfoam/status")
-    assert status.status_code == 200
-    assert "installed" in status.json()
-
-    openfoam = client.post(
-        "/api/run_openfoam",
-        json={"D": 80, "U": 100, "total_time": 0.05},
+    csv_response = client.post(
+        "/api/export_csv",
+        json={"preset": "microchannel_biosensor", "D": 80, "U": 120, "k": 0.01, "total_time": 0.05},
     )
-    assert openfoam.status_code == 200
-    assert "completed" in openfoam.json()
+    assert csv_response.status_code == 200
+    assert "time_s" in csv_response.text

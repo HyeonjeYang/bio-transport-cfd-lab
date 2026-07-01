@@ -101,31 +101,11 @@ button {
   font-weight: 600;
 }
 
-button.secondary,
 button:disabled {
   border-color: var(--line);
   background: var(--panel);
   color: var(--muted);
   cursor: default;
-}
-
-.openfoam-panel {
-  display: grid;
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel);
-}
-
-.openfoam-panel p {
-  margin: 6px 0 0;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-#openfoamResult {
-  overflow-wrap: anywhere;
 }
 
 .workspace {

@@ -78,7 +78,7 @@ Install into another Python project:
 python -m pip install "bio-transport-cfd-lab @ git+https://github.com/HyeonjeYang/bio-transport-cfd-lab.git"
 ```
 
-OpenFOAM can be linked through `scripts/run_openfoam_case.py` or `POST /api/run_openfoam`. The Python solver remains the default fast path.
+OpenFOAM can be linked through `scripts/run_openfoam_case.py` (CLI only; not exposed in the web app). The Python solver remains the default fast path.
 
 OpenFOAM status:
 
