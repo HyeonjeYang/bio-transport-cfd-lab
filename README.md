@@ -1,10 +1,7 @@
 # bio-transport-cfd-lab
 
-Undergraduate teaching lab for biological transport: diffusion, advection-reaction, radial transport, and microchannel biosensor demos.
-
-This is for classroom learning, not production CFD.
-
-이 저장소는 2026 서울대학교 여름학기 `생물물리학입문` 특강을 위한 교육자료입니다.
+이 리포지토리는 2026 서울대학교 여름학기 `생물물리학입문` 특강을 위한 교육자료입니다.
+(생물물리학입문_4차시 : 생물학의 이동현상)
 
 ## Attribution and Use
 
@@ -20,29 +17,21 @@ Educational use only. These models are not validated for research, clinical, reg
 - FastAPI + HTML interface for sliders and plots.
 - Optional OpenFOAM adapter for higher-fidelity CFD checks.
 
-OpenFOAM is optional because it is useful for detailed CFD but too heavy for immediate classroom slider updates. The main workflow uses prescribed flow fields and Python transport solvers.
-
 ## Equations
 
 Cartesian transport:
 
-```text
-dC/dt + u dC/dx + v dC/dy = D (d2C/dx2 + d2C/dy2) - k C + S
-```
+$$\frac{\partial C}{\partial t} + u \frac{\partial C}{\partial x} + v \frac{\partial C}{\partial y} = D\left(\frac{\partial^2 C}{\partial x^2} + \frac{\partial^2 C}{\partial y^2}\right) - kC + S$$
 
 Cylindrical radial transport:
 
-```text
-dC/dt = D (1/r) d/dr(r dC/dr) - k C + S
-```
+$$\frac{\partial C}{\partial t} = \frac{D}{r} \frac{\partial}{\partial r}\left(r \frac{\partial C}{\partial r}\right) - kC + S$$
 
 Spherical radial transport:
 
-```text
-dC/dt = D (1/r^2) d/dr(r^2 dC/dr) - k C + S
-```
+$$\frac{\partial C}{\partial t} = \frac{D}{r^2} \frac{\partial}{\partial r}\left(r^2 \frac{\partial C}{\partial r}\right) - kC + S$$
 
-Units use micrometers and seconds: `D` in `um^2/s`, `U` in `um/s`, `k` in `1/s`.
+Units use micrometers and seconds: $D$ in $\mu m^2/s$, $U$ in $\mu m/s$, $k$ in $s^{-1}$.
 
 ## Quickstart
 
@@ -56,19 +45,6 @@ py -m venv .venv
 py -m pip install -r requirements-dev.txt
 py -m pytest
 py scripts\run_all_examples.py
-uvicorn app.main:app --reload
-```
-
-macOS:
-
-```bash
-git clone https://github.com/HyeonjeYang/bio-transport-cfd-lab.git
-cd bio-transport-cfd-lab
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements-dev.txt
-python -m pytest
-python scripts/run_all_examples.py
 uvicorn app.main:app --reload
 ```
 
@@ -94,39 +70,12 @@ python scripts/run_radial_transport.py --geometry spherical --preset spherical_c
 python scripts/run_radial_transport.py --geometry cylindrical --preset cylindrical_vessel_transport --radius 20 --D 120 --outdir outputs/cylindrical_vessel
 ```
 
-Notebook:
-
-```bash
-jupyter notebook notebooks/BioTransport_CFD_Lab.ipynb
-```
-
 ## Integration
 
 Install into another Python project:
 
 ```bash
 python -m pip install "bio-transport-cfd-lab @ git+https://github.com/HyeonjeYang/bio-transport-cfd-lab.git"
-```
-
-Python call:
-
-```python
-from biotransport_lab.api import run_preset_for_payload
-
-payload = run_preset_for_payload({"preset": "microchannel_biosensor", "D": 80, "U": 200, "k": 0.02})
-```
-
-Local API call:
-
-```bash
-uvicorn app.main:app --reload
-curl -X POST http://127.0.0.1:8000/api/simulate -H "Content-Type: application/json" -d '{"preset":"microchannel_biosensor","D":80,"U":200,"k":0.02}'
-```
-
-PowerShell:
-
-```powershell
-Invoke-RestMethod http://127.0.0.1:8000/api/simulate -Method Post -ContentType "application/json" -Body '{"preset":"microchannel_biosensor","D":80,"U":200,"k":0.02}'
 ```
 
 OpenFOAM can be linked through `scripts/run_openfoam_case.py` or `POST /api/run_openfoam`. The Python solver remains the default fast path.
@@ -154,14 +103,6 @@ python scripts/run_openfoam_case.py --D 80 --U 200 --total-time 0.2 --outdir ope
 - Spherical cell uptake and drug release.
 - Chemotactic gradient demo.
 
-## Teaching Plan
-
-- 10 min: random walk and diffusion.
-- 10 min: Fick's law and flux.
-- 15 min: Peclet number in a microchannel.
-- 15 min: cylindrical and spherical transport.
-- 15 min: biosensor design exercise.
-
 ## Limits
 
 The Python models use prescribed flow, simplified reactions, and low-dimensional grids. They are meant to teach scaling and interpretation. Use OpenFOAM separately when flow physics or geometry detail matters.
@@ -171,10 +112,6 @@ Long diagnostic curves are downsampled with `SimulationConfig.max_diagnostic_poi
 ## Model Checks
 
 Default teaching presets are tested for finite, nonnegative concentrations, stable timesteps, radial flux direction, and no-flux diffusion mass conservation. These checks support classroom use, not research validation.
-
-## External Tools
-
-Built with Python, NumPy, Matplotlib, FastAPI, Plotly.js, and pytest. Optional high-fidelity runs use OpenFOAM (`blockMesh`, `scalarTransportFoam`) if installed separately.
 
 ## License
 
