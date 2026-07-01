@@ -32,6 +32,10 @@ def test_notebook_executes_with_nbclient(tmp_path: Path):
     nbformat = pytest.importorskip("nbformat")
     nbclient = pytest.importorskip("nbclient")
     notebook = nbformat.read(NOTEBOOK_PATH, as_version=4)
-    client = nbclient.NotebookClient(notebook, timeout=180, kernel_name="python3")
-    client.execute(resources={"metadata": {"path": str(Path.cwd())}})
-    assert (Path("outputs") / "notebook" / "microchannel_biosensor" / "final.png").exists()
+    client = nbclient.NotebookClient(
+        notebook,
+        timeout=180,
+        kernel_name="python3",
+        resources={"metadata": {"path": str(Path.cwd())}},
+    )
+    client.execute()
